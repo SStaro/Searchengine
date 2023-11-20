@@ -1,0 +1,29 @@
+server:
+  port: 8080
+
+spring:
+  datasource:
+    username: root
+    password: Sekaman1999
+    url: jdbc:mysql://localhost:3306/search_engine?useSSL=false&requireSSL=false&allowPublicKeyRetrieval=true
+
+  jpa:
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQL8Dialect
+    hibernate:
+      ddl-auto: create
+      show-sql: true
+
+# example values
+indexing-settings:
+  sites:
+#    - url: https://www.lenta.ru
+#      name: Лента.ру
+#      domain: lenta.ru
+#    - url: https://www.playback.ru
+#      name: PlayBack.Ru
+#      domain: playback.ru
+    - url: https://metanit.com/
+      name: metanit
+      domain: metanit.com
