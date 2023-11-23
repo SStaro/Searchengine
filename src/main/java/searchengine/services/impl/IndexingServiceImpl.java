@@ -63,7 +63,7 @@ public class IndexingServiceImpl implements IndexingService {
     private void setPagesInDB(Site siteConfig) {
 
         ForkJoinPool pool = new ForkJoinPool();
-        PageProcessor processor = new PageProcessor(siteConfig);
+        PageProcessor processor = new PageProcessor(siteConfig, siteConfig.getDomain());
         Set<Page> pages = pool.invoke(processor);
 
         searchengine.model.Site siteDB = null;

@@ -16,6 +16,7 @@ import java.util.concurrent.RecursiveTask;
 public class PageProcessor extends RecursiveTask<Set<Page>> {
 
     private final Site site;
+    private final String domain;
 
     private static Set<String> linkSet = new HashSet<>();
 
@@ -23,15 +24,16 @@ public class PageProcessor extends RecursiveTask<Set<Page>> {
     public static int count;
 
 
-    public PageProcessor(Site site) {
+    public PageProcessor(Site site, String domain) {
         this.site = site;
+        this.domain = domain;
         //Testing
         count++;
     }
 
     @Override
     protected Set<Page> compute() {
-        Set<Page> pages = new HashSet<>();
+        Set<Page> pages = new TreeSet<>(new PageComparator());
         List<PageProcessor> tasks = new ArrayList<>();
 
         try {
@@ -43,7 +45,12 @@ public class PageProcessor extends RecursiveTask<Set<Page>> {
 
         linkSet.add(site.getUrl());
         Page page = new Page();
-        page.setPath(site.getUrl());
+
+        int startOfPath = site.getUrl().indexOf(domain) + domain.length();
+
+        String path = site.getUrl().substring(startOfPath);
+
+        page.setPath(path);
         try {
             page.setCode(Jsoup.connect(site.getUrl()).execute().statusCode());
             page.setContent(Jsoup.connect(site.getUrl()).get().html());
@@ -53,7 +60,9 @@ public class PageProcessor extends RecursiveTask<Set<Page>> {
         pages.add(page);
 
         findAllChildSites(site.getUrl());
-        if (site.getChildSites().isEmpty()) {
+
+
+        if (site.getChildSites().isEmpty() || linkSet.size() >= 200) {
             return pages;
         }
 
@@ -62,7 +71,7 @@ public class PageProcessor extends RecursiveTask<Set<Page>> {
             //Testing
             System.out.println(childSite.getUrl());
 
-            PageProcessor task = new PageProcessor(childSite);
+            PageProcessor task = new PageProcessor(childSite, domain);
             task.fork();
             tasks.add(task);
 
@@ -94,14 +103,16 @@ public class PageProcessor extends RecursiveTask<Set<Page>> {
         for (Element link : links) {
             String subUrl = link.attr("abs:href");
 
-            if (!subUrl.contains("metanit.com") || !subUrl.endsWith("/")) {
-                continue;
-            }
+            if (subUrl.contains(domain)
+                    && !subUrl.contains("#")
+                    && (subUrl.endsWith("html") || subUrl.endsWith("/"))) {
 
-            boolean added = linkSet.add(subUrl);
 
-            if (added) {
-                site.addChildPage(subUrl);
+                boolean added = linkSet.add(subUrl);
+
+                if (added) {
+                    site.addChildPage(subUrl);
+                }
             }
         }
     }
