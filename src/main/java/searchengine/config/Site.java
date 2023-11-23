@@ -13,7 +13,7 @@ public class Site {
     private String name;
     private String domain;
 
-    private List<Site> sites;
+    private List<Site> childSites = new ArrayList<>();
 
     public Site() {
 
@@ -23,7 +23,7 @@ public class Site {
         this.url = url;
     }
 
-    public void addChildPages(String url) {
-        sites.add(new Site(url));
+    public void addChildPage(String url) {
+        childSites.add(new Site(url));
     }
 }

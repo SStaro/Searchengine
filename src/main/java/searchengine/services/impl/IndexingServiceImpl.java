@@ -4,7 +4,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.jsoup.Jsoup;
 import org.springframework.stereotype.Service;
-import searchengine.config.PageProcessor;
+import searchengine.utils.PageProcessor;
 import searchengine.config.Site;
 import searchengine.config.SitesList;
 import searchengine.dto.indexing.IndexingResult;
@@ -51,7 +51,7 @@ public class IndexingServiceImpl implements IndexingService {
             log.info("Site saved to DB");
 
 
-            setPagesInDB(siteDB);
+            setPagesInDB(siteConfig);
             siteDB.setStatus(Status.INDEXED);
         }
         IndexingResult indexingResult = new IndexingResult();
@@ -60,31 +60,29 @@ public class IndexingServiceImpl implements IndexingService {
         return indexingResult;
     }
 
-    private void setPagesInDB(searchengine.model.Site site) {
+    private void setPagesInDB(Site siteConfig) {
 
         ForkJoinPool pool = new ForkJoinPool();
-        PageProcessor processor = new PageProcessor(site.getUrl());
-        Set<String> urls = pool.invoke(processor);
+        PageProcessor processor = new PageProcessor(siteConfig);
+        Set<Page> pages = pool.invoke(processor);
 
+        searchengine.model.Site siteDB = null;
+        for (searchengine.model.Site siteModel : siteRepository.findAll()) {
+            if (siteModel.getUrl().equals(siteConfig.getUrl())) {
+                siteDB = siteModel;
+                break;
+            }
+        }
 
         log.info("Got all urls");
 
 
-        for (String url : urls) {
-            try {
-            Page page = new Page();
-            page.setPath(url);
-            page.setCode(Jsoup.connect(url).execute().statusCode());
-            page.setContent(Jsoup.connect(url).get().html());
-            page.setSite(site);
+        for (Page page : pages) {
+
+            page.setSite(siteDB);
 
             pageRepository.save(page);
-
-            } catch (IOException e) {
-                throw new RuntimeException(e);
-            }
         }
-
     }
 
     public static searchengine.model.Site configSiteToModelSite(Site siteConfig) {
