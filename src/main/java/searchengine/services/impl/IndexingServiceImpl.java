@@ -2,7 +2,6 @@ package searchengine.services.impl;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.jsoup.Jsoup;
 import org.springframework.stereotype.Service;
 import searchengine.utils.PageProcessor;
 import searchengine.config.Site;
@@ -14,7 +13,6 @@ import searchengine.repository.PageRepository;
 import searchengine.repository.SiteRepository;
 import searchengine.services.IndexingService;
 
-import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Set;
@@ -29,8 +27,13 @@ public class IndexingServiceImpl implements IndexingService {
     private final SiteRepository siteRepository;
     private final PageRepository pageRepository;
 
+    private
+    static boolean indexingStopped = false;
+
     @Override
     public IndexingResult getIndexingResult() {
+
+        indexingStopped = false;
 
         log.info("Method started");
 
@@ -50,38 +53,55 @@ public class IndexingServiceImpl implements IndexingService {
 
             log.info("Site saved to DB");
 
-
-            setPagesInDB(siteConfig);
-            siteDB.setStatus(Status.INDEXED);
         }
+
+        setPagesInDB();
+
         IndexingResult indexingResult = new IndexingResult();
         indexingResult.setResult(true);
+
+//        PageProcessor.getLinkSet().clear();
 
         return indexingResult;
     }
 
-    private void setPagesInDB(Site siteConfig) {
+    @Override
+    public IndexingResult stopIndexing() {
+        indexingStopped = true;
 
-        ForkJoinPool pool = new ForkJoinPool();
-        PageProcessor processor = new PageProcessor(siteConfig, siteConfig.getDomain());
-        Set<Page> pages = pool.invoke(processor);
+        IndexingResult indexingResult = new IndexingResult();
+        indexingResult.setResult(true);
+        return indexingResult;
+    }
 
-        searchengine.model.Site siteDB = null;
-        for (searchengine.model.Site siteModel : siteRepository.findAll()) {
-            if (siteModel.getUrl().equals(siteConfig.getUrl())) {
-                siteDB = siteModel;
-                break;
-            }
-        }
+    private void setPagesInDB() {
 
-        log.info("Got all urls");
+        for (Site siteConfig : sites.getSites()) {
+            new Thread(() -> {
+                ForkJoinPool pool = new ForkJoinPool();
+                PageProcessor processor = new PageProcessor(siteConfig, siteConfig, pageRepository, siteRepository);
+                pool.invoke(processor);
 
+                searchengine.model.Site siteDB = null;
+                for (searchengine.model.Site siteModel : siteRepository.findAll()) {
+                    if (siteModel.getUrl().equals(siteConfig.getUrl())) {
+                        siteDB = siteModel;
+                        break;
+                    }
+                }
 
-        for (Page page : pages) {
+                if (indexingStopped) {
+                    siteDB.setStatus(Status.FAILED);
+                    siteDB.setLastError("Индексация остановлена пользователем");
 
-            page.setSite(siteDB);
+                    siteRepository.save(siteDB);
 
-            pageRepository.save(page);
+                } else {
+                    siteDB.setStatus(Status.INDEXED);
+
+                    siteRepository.save(siteDB);
+                }
+            }).start();
         }
     }
 
@@ -90,5 +110,9 @@ public class IndexingServiceImpl implements IndexingService {
         siteDB.setUrl(siteConfig.getUrl());
         siteDB.setName(siteConfig.getName());
         return siteDB;
+    }
+
+    public static boolean isIndexingStopped() {
+        return indexingStopped;
     }
 }
