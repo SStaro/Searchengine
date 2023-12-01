@@ -27,8 +27,7 @@ public class IndexingServiceImpl implements IndexingService {
     private final SiteRepository siteRepository;
     private final PageRepository pageRepository;
 
-    private
-    static boolean indexingStopped = false;
+    private static boolean indexingStopped = false;
 
     @Override
     public IndexingResult getIndexingResult() {
@@ -81,6 +80,8 @@ public class IndexingServiceImpl implements IndexingService {
                 ForkJoinPool pool = new ForkJoinPool();
                 PageProcessor processor = new PageProcessor(siteConfig, siteConfig, pageRepository, siteRepository);
                 pool.invoke(processor);
+
+                log.info("Thread " + siteConfig.getDomain() + " is here");
 
                 searchengine.model.Site siteDB = null;
                 for (searchengine.model.Site siteModel : siteRepository.findAll()) {

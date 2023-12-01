@@ -51,7 +51,6 @@ public class PageProcessor extends RecursiveAction {
                     }
                 }
 
-//        Set<Page> pages = new TreeSet<>(new PageComparator());
         List<PageProcessor> tasks = new ArrayList<>();
 
         if (IndexingServiceImpl.isIndexingStopped()) {
@@ -82,8 +81,8 @@ public class PageProcessor extends RecursiveAction {
         }
 
         for (Page pageDB : pageRepository.findAll()) {
-            if (pageDB.getPath().equals(page.getPath())) {
-                break;
+            if (pageDB.equals(page)) {
+               return;
             }
         }
 
@@ -147,9 +146,5 @@ public class PageProcessor extends RecursiveAction {
                 }
             }
         }
-    }
-
-    public static Set<String> getLinkSet() {
-        return linkSet;
     }
 }
