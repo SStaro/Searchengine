@@ -1,15 +1,21 @@
 package searchengine.utils;
 
 import lombok.extern.slf4j.Slf4j;
+import org.apache.lucene.morphology.russian.RussianLuceneMorphology;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
 import searchengine.config.Site;
+import searchengine.model.Index;
+import searchengine.model.Lemma;
 import searchengine.model.Page;
+import searchengine.repository.IndexRepository;
+import searchengine.repository.LemmaRepository;
 import searchengine.repository.PageRepository;
 import searchengine.repository.SiteRepository;
 import searchengine.services.impl.IndexingServiceImpl;
+import searchengine.services.impl.LemmaServiceImpl;
 
 import java.io.IOException;
 import java.time.LocalDateTime;
@@ -24,6 +30,8 @@ public class PageProcessor extends RecursiveAction {
     private final Site site;
     private final PageRepository pageRepository;
     private final SiteRepository siteRepository;
+    private final LemmaRepository lemmaRepository;
+    private final IndexRepository indexRepository;
 
     private static Set<String> linkSet = new HashSet<>();
 
@@ -31,11 +39,15 @@ public class PageProcessor extends RecursiveAction {
     public static int count;
 
 
-    public PageProcessor(Site rootSite, Site site, PageRepository pageRepository, SiteRepository siteRepository) {
+    public PageProcessor(Site rootSite, Site site, PageRepository pageRepository,
+                         SiteRepository siteRepository, LemmaRepository lemmaRepository,
+                         IndexRepository indexRepository) {
         this.rootSite = rootSite;
         this.site = site;
         this.pageRepository = pageRepository;
         this.siteRepository = siteRepository;
+        this.lemmaRepository = lemmaRepository;
+        this.indexRepository = indexRepository;
         //Testing
         count++;
     }
@@ -75,18 +87,49 @@ public class PageProcessor extends RecursiveAction {
         page.setSite(siteDB);
         try {
             page.setCode(Jsoup.connect(site.getUrl()).execute().statusCode());
-            page.setContent(Jsoup.connect(site.getUrl()).get().html());
+            String getHtml = Jsoup.connect(site.getUrl()).get().html();
+            page.setContent(getHtml);
+
+            for (Page pageDB : pageRepository.findAll()) {
+                if (pageDB.equals(page)) {
+                    return;
+                }
+            }
+
+            pageRepository.save(page);
+
+            //Lemmas code
+            LemmaServiceImpl lemmaServiceImpl = new LemmaServiceImpl(lemmaRepository, pageRepository);
+            HashMap<String, Integer> lemmas = lemmaServiceImpl.collectLemmas(getHtml);
+
+            for (Map.Entry<String, Integer> entry : lemmas.entrySet()) {
+                Lemma newLemma = new Lemma();
+                boolean lemmaInDB = false;
+                for (Lemma lemma : lemmaRepository.findAll()) {
+                    if (lemma.getLemma().equals(entry.getKey())) {
+                        lemma.setFrequency(lemma.getFrequency() + 1);
+                        lemmaRepository.save(lemma);
+                        lemmaInDB = true;
+                        newLemma = lemma;
+                        break;
+                    }
+                }
+                if (!lemmaInDB) {
+                    newLemma.setSite(siteDB);
+                    newLemma.setLemma(entry.getKey());
+                    newLemma.setFrequency(1);
+                    lemmaRepository.save(newLemma);
+                }
+                Index index = new Index();
+                index.setPage(page);
+                index.setLemma(newLemma);
+                index.setRank(entry.getValue());
+                indexRepository.save(index);
+            }
+
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
-
-        for (Page pageDB : pageRepository.findAll()) {
-            if (pageDB.equals(page)) {
-               return;
-            }
-        }
-
-        pageRepository.save(page);
 
         siteDB.setStatusTime(LocalDateTime.now());
         siteRepository.save(siteDB);
@@ -103,7 +146,8 @@ public class PageProcessor extends RecursiveAction {
             //Testing
             System.out.println(childSite.getUrl());
 
-            PageProcessor task = new PageProcessor(rootSite, childSite, pageRepository, siteRepository);
+            PageProcessor task = new PageProcessor(rootSite, childSite, pageRepository,
+                    siteRepository, lemmaRepository, indexRepository);
             task.fork();
             tasks.add(task);
 

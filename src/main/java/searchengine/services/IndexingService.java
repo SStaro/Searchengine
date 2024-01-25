@@ -6,4 +6,5 @@ public interface IndexingService {
 
     IndexingResult getIndexingResult();
     IndexingResult stopIndexing();
+    IndexingResult indexPage(String pageUrl);
 }

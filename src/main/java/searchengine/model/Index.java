@@ -15,11 +15,13 @@ public class Index {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private int id;
 
-    @Column(name ="page_id", nullable = false)
-    private int pageId;
+    @ManyToOne
+    @JoinColumn(name ="page_id", nullable = false)
+    private Page page;
 
-    @Column(name = "lemma_id", nullable = false)
-    private int lemmaId;
+    @ManyToOne
+    @JoinColumn(name = "lemma_id", nullable = false)
+    private Lemma lemma;
 
     @Column(name = "`rank`", nullable = false)
     private float rank;
