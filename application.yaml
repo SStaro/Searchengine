@@ -15,7 +15,6 @@ spring:
       ddl-auto: create
       show-sql: true
 
-# example values
 indexing-settings:
   sites:
     - url: https://www.playback.ru/

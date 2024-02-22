@@ -1,12 +1,8 @@
-package searchengine.dto.indexing;
+package searchengine.dto.indexing.results;
 
 import lombok.Data;
 
 @Data
 public class IndexingResult {
-
     private boolean result;
-
-    private String error;
-
 }
