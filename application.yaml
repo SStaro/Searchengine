@@ -23,3 +23,12 @@ indexing-settings:
     - url: https://metanit.com/
       name: metanit
       domain: metanit.com
+    - url: https://ipfran.ru/
+      name: ipfran
+      domain: ipfran.ru
+    - url: https://dimonvideo.ru/
+      name: dimonvideo
+      domain: dimonvideo.ru
+    - url: https://www.svetlovka.ru/
+      name: svetlovka
+      domain: svetlovka.ru

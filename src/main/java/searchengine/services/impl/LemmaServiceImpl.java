@@ -16,7 +16,7 @@ public class LemmaServiceImpl implements LemmaService {
 
     private final LuceneMorphology russianLuceneMorphology = new RussianLuceneMorphology();
     private final LuceneMorphology englishLuceneMorphology = new EnglishLuceneMorphology();
-    private static final String[] particlesNamesRus = new String[]{"МЕЖД", "ПРЕДЛ", "СОЮЗ"};
+    private static final String[] particlesNamesRus = new String[]{"МЕЖД", "ПРЕДЛ", "СОЮЗ", "ЧАСТ"};
     private static final String[] particlesNamesEng = new String[]{"INT", "PREP", "CONJ"};
 
 

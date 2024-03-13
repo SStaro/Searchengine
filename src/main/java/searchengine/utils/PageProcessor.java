@@ -52,14 +52,13 @@ public class PageProcessor extends RecursiveAction {
         searchengine.model.Site siteDB = null;
                 for (searchengine.model.Site siteModel : siteRepository.findAll()) {
                     if (siteModel.getStatus().equals(Status.FAILED)) {
-                        return;
+                        continue;
                     }
                     if (siteModel.getUrl().equals(rootSite.getUrl())) {
                         siteDB = siteModel;
                         break;
                     }
                 }
-
         List<PageProcessor> tasks = new ArrayList<>();
 
         if (IndexingServiceImpl.isIndexingStopped()) {
@@ -89,7 +88,11 @@ public class PageProcessor extends RecursiveAction {
             page.setCode(Jsoup.connect(site.getUrl()).execute().statusCode());
             getHtml = Jsoup.connect(site.getUrl()).get().html();
         } catch (HttpStatusException httpStatusException) {
+            if (siteDB == null) {
+                return;
+            }
             page.setCode(httpStatusException.getStatusCode());
+            page.setContent(" ");
             pageRepository.save(page);
             return;
         } catch (IOException exception) {
@@ -116,6 +119,9 @@ public class PageProcessor extends RecursiveAction {
         HashMap<String, Integer> lemmas = lemmaServiceImpl.collectLemmas(getHtml);
 
         for (Map.Entry<String, Integer> entry : lemmas.entrySet()) {
+            if (entry.getKey().isEmpty()) {
+                continue;
+            }
             Lemma newLemma = new Lemma();
             boolean lemmaInDB = false;
             for (Lemma lemma : lemmaRepository.findAll()) {
@@ -175,10 +181,8 @@ public class PageProcessor extends RecursiveAction {
 
         for (Element link : links) {
             String subUrl = link.attr("abs:href");
-
             if (subUrl.contains(rootSite.getDomain())
-                    && !subUrl.contains("#")
-                    && (subUrl.endsWith("html") || subUrl.endsWith("/"))) {
+                    && !subUrl.contains("#")) {
 
 
                 boolean added = linkSet.add(subUrl);

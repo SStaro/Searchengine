@@ -47,7 +47,6 @@ public class IndexingServiceImpl implements IndexingService {
     @Override
     public IndexingResult getIndexingResult() {
         indexingStopped = false;
-        System.out.println(indexingNow);
         if (indexingNow) {
             return new IndexingResultFail("Индексация уже запущена");
         }
@@ -82,12 +81,8 @@ public class IndexingServiceImpl implements IndexingService {
 
             siteDB.setStatus(Status.INDEXING);
             siteRepository.save(siteDB);
-
-
-            log.info("Site saved to DB");
-
         }
-        System.out.println(indexingNow);
+
         setPagesInDB();
 
         return new IndexingResultSuccess();
@@ -262,7 +257,6 @@ public class IndexingServiceImpl implements IndexingService {
                         siteRepository, lemmaRepository, indexRepository);
                 pool.invoke(processor);
 
-                log.info("Thread " + siteConfig.getDomain() + " is here");
 
                 searchengine.model.Site siteDB = null;
                 for (searchengine.model.Site siteModel : siteRepository.findAll()) {
@@ -289,10 +283,13 @@ public class IndexingServiceImpl implements IndexingService {
         for (searchengine.model.Site siteDB : siteRepository.findAll()) {
             if (siteDB.getStatus().equals(Status.INDEXED)) {
                 sitesIndexed++;
+                System.out.println(sitesIndexed);
+                System.out.println(siteRepository.count());
             }
         }
         if (sitesIndexed == siteRepository.count()) {
             indexingNow = false;
+            System.out.println("I'm here");
         }
     }
 
