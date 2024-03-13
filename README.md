@@ -1,6 +1,6 @@
 # **Итоговый проект «Поисковый движок» Skillbox**
 ## Описание ##
-:books: $\color[RGB]{155,255,200} {Используемые} \ {технологии}$: Java 21, Spring Boot 2.7.1, Maven, MySQL, Hibernate, Morphology Library.
+:books: $\color[RGB]{60,200,120} {Используемые} \ {технологии}$: Java 21, Spring Boot 2.7.1, Maven, MySQL, Hibernate, Morphology Library.
 
 Приложение в многопоточном режиме проводит индексацию страниц сайтов и сохраняет информацию в базу данных.
 Далее по проиндексированным страницам проводится поиск (по запросу) и выдаются релевантные результаты.
@@ -9,21 +9,45 @@
 - **GET /**
   
   Открывает удобный веб-интерфейс для работы с приложением
+  ![image](https://github.com/SStaro/searchengine/assets/102288630/27b9dd9b-ee14-4d2c-a54d-f55253666fc7)
+
 - **GET /api/statistics**
 
-  Выводит статистику, полученную после индексации
+  Выводит статистику, связанную с индексацией
+  ![image](https://github.com/SStaro/searchengine/assets/102288630/1764ee3b-c80e-4ad4-8aa5-8f1a6e5adaa1)
+
 - **GET /api/startIndexing**
   
   Начинает индексацию сайтов, указанных в файле *application.yaml*
-- **GET /api/storIndexing**
+  ![Видео без названия — сделано в Clipchamp (6)](https://github.com/SStaro/searchengine/assets/102288630/5a7c8e0d-9ae9-4f5f-ba81-75fea15fff9e)
+
+- **GET /api/stopIndexing**
   
-  Останавливает индексацию
+  Останавливает индексацию    
+  ![Видео без названия — сделано в Clipchamp (5)](https://github.com/SStaro/searchengine/assets/102288630/2754c97c-17d3-496a-ad88-6a6e02427e90)
+
 - **POST /api/indexPage**
   
   Запускает индексацию/переиндексацию страницы
+  ![image](https://github.com/SStaro/searchengine/assets/102288630/913fef4f-a6c6-4435-b8ca-bcdc5c64a977)
+
+
 - **GET /api/search**
   
   Проводит поиск по проиндексированным страницам
+  ![image](https://github.com/SStaro/searchengine/assets/102288630/b5f4f987-ce0c-48e9-98a3-fc306043ff13)
+
+
+## Инструкция по запуску ##
+Чтобы скачать проект, нужно скачать заархивированную папку с проектом или клонировать репозиторий с помощью следующей команды:
+
+`
+git clone https://github.com/SStaro/searchengine.git <путь-до-папки-куда-клонируем-репозиторий>
+`
+> [!WARNING]
+> Для использования этой команды должен быть установлен git.
+Можно запустить приложение прямо из IDE либо через jar файл.
+
 
 > [!IMPORTANT]
 > Необходимо указать в файле *application.yaml*:
