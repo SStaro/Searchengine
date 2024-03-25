@@ -51,8 +51,6 @@ public class IndexingServiceImpl implements IndexingService {
             return new IndexingResultFail("Индексация уже запущена");
         }
         indexingNow = true;
-        log.info("Method started");
-
 
         List<Site> siteList = sites.getSites();
         for (Site siteConfig : siteList) {
@@ -289,7 +287,6 @@ public class IndexingServiceImpl implements IndexingService {
         }
         if (sitesIndexed == siteRepository.count()) {
             indexingNow = false;
-            System.out.println("I'm here");
         }
     }
 

@@ -10,4 +10,5 @@ import java.util.List;
 @Repository
 public interface LemmaRepository extends JpaRepository<Lemma, Integer> {
     List<Lemma> findAllBySite(Site site);
+    List<Lemma> findAllByLemma(String lemma);
 }

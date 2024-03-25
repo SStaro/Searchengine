@@ -1,7 +1,6 @@
 package searchengine.services.impl;
 
 import org.jsoup.Jsoup;
-import org.springframework.http.converter.json.GsonBuilderUtils;
 import org.springframework.stereotype.Service;
 import searchengine.dto.searching.*;
 import searchengine.dto.searching.results.SearchingResult;
@@ -29,7 +28,7 @@ public class SearchServiceImpl implements SearchService {
     private final IndexRepository indexRepository;
     private final SiteRepository siteRepository;
     private final LemmaServiceImpl lemmaService;
-    private final float lemmaFrequencyLimit = 0.9f;
+    private final float lemmaFrequencyLimit = 1f;
     private final int amountOfSymbolsBeforeQueryLemma = 100;
     private final int amountOfSymbolsAfterQueryLemma = 100;
     private boolean canFindAllQueryWords = true;
@@ -50,51 +49,51 @@ public class SearchServiceImpl implements SearchService {
             return new SearchingResultFail("Задан пустой поисковый запрос");
         }
         HashMap<String, Integer> lemmas = lemmaService.collectLemmas(query);
+
         TreeSet<Lemma> lemmaListSearchingFor = new TreeSet<>(Comparator.comparing(Lemma::getFrequency));
 
-        List<Lemma> allLemmasInDB;
+        List<Lemma> allLemmasInDB = new ArrayList<>();
         Site siteToSearchIn = new Site();
+
+        boolean allQueryWordsWereFoundForSelectedSite = true;
+
         if (selectedSiteToSearchIn == null) {
-            allLemmasInDB = lemmaRepository.findAll();
+            for (Site site : siteRepository.findAll()) {
+                List<Lemma> siteLemmasInDB = lemmaRepository.findAllBySite(site);
+                if (lemmasInDBContainsQueryLemmas(lemmas, siteLemmasInDB, lemmaListSearchingFor)) {
+                    allLemmasInDB.addAll(siteLemmasInDB);
+                }
+            }
+
         } else {
             siteToSearchIn = siteRepository.findByUrl(selectedSiteToSearchIn).get();
             allLemmasInDB = lemmaRepository.findAllBySite(siteToSearchIn);
-        }
-        for (Map.Entry<String, Integer> entry : lemmas.entrySet()) {
-            for (Lemma lemmaInDB : allLemmasInDB) {
-                if (entry.getKey().equals(lemmaInDB.getLemma())) {
-                    int lemmaFrequency = lemmaInDB.getFrequency();
-                    double lemmaFrequencyToAllPages = 1.0 * lemmaFrequency / pageRepository.count();
-                    boolean lemmaIsTooFrequent = lemmaFrequencyToAllPages > lemmaFrequencyLimit;
-                    if (!lemmaIsTooFrequent) {
-                        lemmaListSearchingFor.add(lemmaInDB);
-                    }
-                    break;
-                }
-            }
+            allQueryWordsWereFoundForSelectedSite = lemmasInDBContainsQueryLemmas(lemmas, allLemmasInDB, lemmaListSearchingFor);
         }
 
 
 
-        if (lemmaListSearchingFor.isEmpty()) {
+        if (lemmaListSearchingFor.isEmpty() || !allQueryWordsWereFoundForSelectedSite) {
             return new SearchingResultFail("По данному поисковому запросу ничего не найдено");
         }
         Lemma rarestLemma = lemmaListSearchingFor.first();
+        List<Lemma> lemmasWithRarestStringLemma = lemmaRepository.findAllByLemma(rarestLemma.getLemma());
 
         if (indexRepository.count() == 0) {
             return new SearchingResultFail("Индексации не происходило");
         }
 
-        List<Index> neededIndexes = indexRepository.findAllByLemma(rarestLemma);
-
         List<Page> pages = new ArrayList<>();
 
-        for (Index index : neededIndexes) {
-            boolean siteToSearchInEqualsTheSiteWeGotWithIndex = index.getPage().getSite().equals(siteToSearchIn);
-            if (!(selectedSiteToSearchIn == null) && !siteToSearchInEqualsTheSiteWeGotWithIndex) {
-                continue;
+        for (Lemma lemmaWithRarestString : lemmasWithRarestStringLemma) {
+            List<Index> neededIndexes = indexRepository.findAllByLemma(lemmaWithRarestString);
+            for (Index index : neededIndexes) {
+                boolean siteToSearchInEqualsTheSiteWeGotWithIndex = index.getPage().getSite().equals(siteToSearchIn);
+                if (!(selectedSiteToSearchIn == null) && !siteToSearchInEqualsTheSiteWeGotWithIndex) {
+                    continue;
+                }
+                pages.add(index.getPage());
             }
-            pages.add(index.getPage());
         }
 
         float maxPageRelevance = 0;
@@ -110,12 +109,10 @@ public class SearchServiceImpl implements SearchService {
 
             float absPageRelevance = 0;
             for (Lemma lemmaFromQuery : lemmaListSearchingFor) {
-                boolean thereIsLemmaInQueryOnPage = false;
 
                 for (Lemma lemmaOnPage : lemmasOnPage) {
 
                     if (lemmaFromQuery.equals(lemmaOnPage)) {
-                        thereIsLemmaInQueryOnPage = true;
                         absPageRelevance = absPageRelevance + indexRepository.findByLemmaAndPage(lemmaOnPage, page).get().getRank();
                         if (absPageRelevance > maxPageRelevance ) {
                             maxPageRelevance = absPageRelevance;
@@ -123,14 +120,10 @@ public class SearchServiceImpl implements SearchService {
                         break;
                     }
                 }
-                if (!thereIsLemmaInQueryOnPage) {
-                    pages.remove(page);
-                }
             }
             float relativeRelevance = absPageRelevance / maxPageRelevance;
             pageToRelevanceMap.put(page, relativeRelevance);
         }
-
 
         if (pages.isEmpty()) {
             SearchingResultSuccess searchingResultSuccess = new SearchingResultSuccess();
@@ -188,6 +181,7 @@ public class SearchServiceImpl implements SearchService {
 
         searchingResultSuccess.setCount(searchingDataList.size());
         searchingResultSuccess.setData(searchingDataArrayListWithOffsetAndLimit);
+
         return searchingResultSuccess;
     }
 
@@ -260,8 +254,9 @@ public class SearchServiceImpl implements SearchService {
                 canFindAllQueryWords = true;
 
                 result = snippetBuilder.toString();
+            } else if (!snippetTextLowerCase.contains(queryWords[0])) {
+                break;
             } else {
-
                 result = getPageSnippet(url, query, endOfLemma);
                 break;
             }
@@ -271,7 +266,28 @@ public class SearchServiceImpl implements SearchService {
             result = result + "...";
         }
 
-
         return result;
+    }
+
+    private boolean lemmasInDBContainsQueryLemmas(HashMap<String, Integer> lemmas, List<Lemma> allLemmasInDB, TreeSet<Lemma> lemmaListSearchingFor) {
+        for (Map.Entry<String, Integer> entry : lemmas.entrySet()) {
+            boolean siteContainsQueryLemma = false;
+            for (Lemma lemmaInDB : allLemmasInDB) {
+                if (entry.getKey().equals(lemmaInDB.getLemma())) {
+                    int lemmaFrequency = lemmaInDB.getFrequency();
+                    double lemmaFrequencyToAllPages = 1.0 * lemmaFrequency / pageRepository.count();
+                    boolean lemmaIsTooFrequent = lemmaFrequencyToAllPages > lemmaFrequencyLimit;
+                    siteContainsQueryLemma = true;
+                    if (!lemmaIsTooFrequent) {
+                        lemmaListSearchingFor.add(lemmaInDB);
+                    }
+                    break;
+                }
+            }
+            if (!siteContainsQueryLemma) {
+                return false;
+            }
+        }
+        return true;
     }
 }

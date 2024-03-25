@@ -1,7 +1,6 @@
 package searchengine.dto.searching;
 
 import lombok.Data;
-import searchengine.utils.SearchingPageInfo;
 
 @Data
 public class SearchingData {

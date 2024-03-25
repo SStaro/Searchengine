@@ -125,7 +125,7 @@ public class PageProcessor extends RecursiveAction {
             Lemma newLemma = new Lemma();
             boolean lemmaInDB = false;
             for (Lemma lemma : lemmaRepository.findAll()) {
-                if (lemma.getLemma().equals(entry.getKey())) {
+                if (lemma.getLemma().equalsIgnoreCase(entry.getKey()) && lemma.getSite().getUrl().equals(siteDB.getUrl())) {
                     lemma.setFrequency(lemma.getFrequency() + 1);
                     lemmaRepository.save(lemma);
                     lemmaInDB = true;
