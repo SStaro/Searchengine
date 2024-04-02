@@ -1,18 +1,17 @@
-package searchengine.services.impl;
+package searchengine.utils.lemmas;
 
 import org.apache.lucene.morphology.LuceneMorphology;
 import org.apache.lucene.morphology.english.EnglishLuceneMorphology;
 import org.apache.lucene.morphology.russian.RussianLuceneMorphology;
 import org.jsoup.Jsoup;
-import org.springframework.stereotype.Service;
-import searchengine.services.LemmaService;
+import org.springframework.stereotype.Component;
 import org.jsoup.safety.*;
 
 import java.io.IOException;
 import java.util.*;
 
-@Service
-public class LemmaServiceImpl implements LemmaService {
+@Component
+public class CollectionOfLemmasImpl implements CollectionOfLemmas {
 
     private final LuceneMorphology russianLuceneMorphology = new RussianLuceneMorphology();
     private final LuceneMorphology englishLuceneMorphology = new EnglishLuceneMorphology();
@@ -21,7 +20,7 @@ public class LemmaServiceImpl implements LemmaService {
 
 
 
-    public LemmaServiceImpl() throws IOException {
+    public CollectionOfLemmasImpl() throws IOException {
 
     }
 
@@ -30,46 +29,20 @@ public class LemmaServiceImpl implements LemmaService {
         String text = textWithoutHtmlTags(htmlText);
         String[] words = arrayContainsRussianOrEnglishWords(text);
         HashMap<String, Integer> lemmas = new HashMap<>();
-
         String rusRegex = "[^a-z]+";
         String engRegex = "[a-z]+";
-
         for (String word : words) {
             String normalWord = "";
-
             if (word.isBlank()) {
                 continue;
             }
-
             if (word.matches(rusRegex)) {
-
-                List<String> wordBaseForms = russianLuceneMorphology.getMorphInfo(word);
-                if (anyWordBaseBelongToParticle(wordBaseForms)) {
-                    continue;
-                }
-
-
-                List<String> normalForms = russianLuceneMorphology.getNormalForms(word);
-                if (normalForms.isEmpty()) {
-                    continue;
-                }
-                normalWord = normalForms.get(0);
-            } if (word.matches(engRegex)) {
-                List<String> wordBaseForms = englishLuceneMorphology.getMorphInfo(word);
-                if (anyWordBaseBelongToParticle(wordBaseForms)) {
-                    continue;
-                }
-
-
-                List<String> normalForms = englishLuceneMorphology.getNormalForms(word);
-                if (normalForms.isEmpty()) {
-                    continue;
-                }
-                normalWord = normalForms.get(0);
+                normalWord = getNormalWord(word, russianLuceneMorphology);
             }
 
-
-
+            if (word.matches(engRegex)) {
+                normalWord = getNormalWord(word, englishLuceneMorphology);
+            }
             if (lemmas.containsKey(normalWord)) {
                 lemmas.put(normalWord, lemmas.get(normalWord) +1);
             } else {
@@ -77,6 +50,16 @@ public class LemmaServiceImpl implements LemmaService {
             }
         }
         return lemmas;
+    }
+
+    private String getNormalWord(String word, LuceneMorphology luceneMorphology) {
+        List<String> wordBaseForms = luceneMorphology.getMorphInfo(word);
+        List<String> normalForms = luceneMorphology.getNormalForms(word);
+        if (anyWordBaseBelongToParticle(wordBaseForms) || normalForms.isEmpty()) {
+            return "";
+        } else {
+            return normalForms.get(0);
+        }
     }
 
     @Override

@@ -4,7 +4,7 @@ server:
 spring:
   datasource:
     username: root
-    password: Sekaman1999
+    password: root
     url: jdbc:mysql://localhost:3306/search_engine?useSSL=false&requireSSL=false&allowPublicKeyRetrieval=true
 
   jpa:
@@ -20,9 +20,6 @@ indexing-settings:
     - url: https://www.playback.ru/
       name: PlayBack.Ru
       domain: playback.ru
-    - url: https://metanit.com/
-      name: metanit
-      domain: metanit.com
     - url: https://ipfran.ru/
       name: ipfran
       domain: ipfran.ru

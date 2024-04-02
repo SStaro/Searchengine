@@ -1,7 +1,6 @@
 package searchengine.services.impl;
 
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.jsoup.HttpStatusException;
 import org.jsoup.Jsoup;
 import org.springframework.stereotype.Service;
@@ -11,6 +10,7 @@ import searchengine.model.Index;
 import searchengine.model.Lemma;
 import searchengine.repository.IndexRepository;
 import searchengine.repository.LemmaRepository;
+import searchengine.utils.lemmas.CollectionOfLemmasImpl;
 import searchengine.utils.PageProcessor;
 import searchengine.config.Site;
 import searchengine.config.SitesList;
@@ -31,7 +31,6 @@ import java.util.concurrent.ForkJoinPool;
 
 @Service
 @RequiredArgsConstructor
-@Slf4j
 public class IndexingServiceImpl implements IndexingService {
 
     private final SitesList sites;
@@ -54,36 +53,39 @@ public class IndexingServiceImpl implements IndexingService {
 
         List<Site> siteList = sites.getSites();
         for (Site siteConfig : siteList) {
-
-            searchengine.model.Site siteDB = configSiteToModelSite(siteConfig);
-            for (searchengine.model.Site siteModel : siteRepository.findAll()) {
-                if (siteModel.getUrl().equals(siteConfig.getUrl())) {
-                    siteRepository.delete(siteModel);
-                }
-            }
-            siteDB.setStatusTime(LocalDateTime.now());
-
-            try {
-                Jsoup.connect(siteDB.getUrl()).execute();
-            } catch (HttpStatusException httpStatusException) {
-                siteDB.setStatus(Status.FAILED);
-                setErrors(siteDB, httpStatusException.getStatusCode());
-                siteRepository.save(siteDB);
-                continue;
-            } catch (IOException exception) {
-                siteDB.setStatus(Status.FAILED);
-                exception.printStackTrace();
-                siteRepository.save(siteDB);
-                continue;
-            }
-
-            siteDB.setStatus(Status.INDEXING);
-            siteRepository.save(siteDB);
+            updateSitesInSiteRepository(siteConfig);
         }
 
         setPagesInDB();
 
         return new IndexingResultSuccess();
+    }
+
+    private void updateSitesInSiteRepository(Site siteConfig) {
+        searchengine.model.Site siteDB = configSiteToModelSite(siteConfig);
+        for (searchengine.model.Site siteModel : siteRepository.findAll()) {
+            if (siteModel.getUrl().equals(siteConfig.getUrl())) {
+                siteRepository.delete(siteModel);
+            }
+        }
+        siteDB.setStatusTime(LocalDateTime.now());
+
+        try {
+            Jsoup.connect(siteDB.getUrl()).execute();
+        } catch (HttpStatusException httpStatusException) {
+            siteDB.setStatus(Status.FAILED);
+            setErrors(siteDB, httpStatusException.getStatusCode());
+            siteRepository.save(siteDB);
+            return;
+        } catch (IOException exception) {
+            siteDB.setStatus(Status.FAILED);
+            siteDB.setLastError(exception.getMessage());
+            siteRepository.save(siteDB);
+            return;
+        }
+
+        siteDB.setStatus(Status.INDEXING);
+        siteRepository.save(siteDB);
     }
 
     @Override
@@ -101,10 +103,8 @@ public class IndexingServiceImpl implements IndexingService {
             return new IndexingResultFail("Данная страница находится за пределами " +
                     "сайтов, указанных в конфигурационном файле");
         }
-
         searchengine.model.Site siteDB = configSiteToModelSite(configSite);
         boolean siteAlreadyInRepository = false;
-
         for (searchengine.model.Site siteModel : siteRepository.findAll()) {
             if (siteModel.getUrl().equals(siteDB.getUrl())) {
                 siteDB = siteModel;
@@ -112,9 +112,42 @@ public class IndexingServiceImpl implements IndexingService {
                 break;
             }
         }
-
         siteDB.setStatusTime(LocalDateTime.now());
+        IndexingResultFail httpStatusExceptionIfCantAccessSite = setErrorsIfCantAccessSite(siteDB);
+        if (httpStatusExceptionIfCantAccessSite != null) {
+            return httpStatusExceptionIfCantAccessSite;
+        }
+        if (!siteAlreadyInRepository) {
+            siteDB.setStatus(Status.INDEXING);
+        }
+        siteRepository.save(siteDB);
+        boolean isPageAlreadyInDB = false;
+        Page page = new Page();
+        int startOfPath = pageUrl.indexOf(configSite.getDomain()) + configSite.getDomain().length();
+        String path = pageUrl.substring(startOfPath);
+        return getIndexingResultAndSetInfoToRepositories(pageUrl, page, path, siteDB, isPageAlreadyInDB);
+    }
 
+    private IndexingResult getIndexingResultAndSetInfoToRepositories(String pageUrl, Page page, String path, searchengine.model.Site siteDB, boolean isPageAlreadyInDB) {
+        page.setPath(path);
+        page.setSite(siteDB);
+        Page pageFromDB = new Page();
+        for (Page pageDB : pageRepository.findAll()) {
+            if (page.equals(pageDB)) {
+                pageFromDB = pageDB;
+                isPageAlreadyInDB = true;
+                break;
+            }
+        }
+        if (!addPageLemmasAndIndexes(page, pageUrl, isPageAlreadyInDB, pageFromDB, siteDB)) {
+            return new IndexingResultFail("Невозможно получить доступ к странице");
+        }
+        siteDB.setStatusTime(LocalDateTime.now());
+        siteRepository.save(siteDB);
+        return new IndexingResultSuccess();
+    }
+
+    private IndexingResultFail setErrorsIfCantAccessSite(searchengine.model.Site siteDB) {
         try {
             Jsoup.connect(siteDB.getUrl()).execute();
         } catch (HttpStatusException httpStatusException) {
@@ -128,42 +161,7 @@ public class IndexingServiceImpl implements IndexingService {
             siteRepository.save(siteDB);
             return new IndexingResultFail("Невозможно получить доступ к сайту.");
         }
-
-        if (!siteAlreadyInRepository) {
-            siteDB.setStatus(Status.INDEXING);
-        }
-
-        siteRepository.save(siteDB);
-
-        boolean isPageAlreadyInDB = false;
-
-        Page page = new Page();
-
-        int startOfPath = pageUrl.indexOf(configSite.getDomain()) + configSite.getDomain().length();
-
-        String path = pageUrl.substring(startOfPath);
-
-        page.setPath(path);
-        page.setSite(siteDB);
-
-        Page pageFromDB = new Page();
-
-        for (Page pageDB : pageRepository.findAll()) {
-            if (page.equals(pageDB)) {
-                pageFromDB = pageDB;
-                isPageAlreadyInDB = true;
-                break;
-            }
-        }
-
-        if (!addPageLemmasAndIndexes(page, pageUrl, isPageAlreadyInDB, pageFromDB, siteDB)) {
-            return new IndexingResultFail("Невозможно получить доступ к странице");
-        }
-
-        siteDB.setStatusTime(LocalDateTime.now());
-        siteRepository.save(siteDB);
-
-        return new IndexingResultSuccess();
+        return null;
     }
 
     @Override
@@ -185,53 +183,13 @@ public class IndexingServiceImpl implements IndexingService {
 
             String getHtml = Jsoup.connect(pageUrl).get().html();
             page.setContent(getHtml);
-            LemmaServiceImpl lemmaServiceImpl = new LemmaServiceImpl();
-            HashMap<String, Integer> lemmas = lemmaServiceImpl.collectLemmas(getHtml);
+            CollectionOfLemmasImpl collectionOfLemmasImpl = new CollectionOfLemmasImpl();
+            HashMap<String, Integer> lemmas = collectionOfLemmasImpl.collectLemmas(getHtml);
 
-            if (isPageAlreadyInDB) {
-
-                List<Index> indexesFromThePageIndexRepository = indexRepository.findAllByPage(pageFromDB);
-                List<Lemma> lemmasFromThePageIndexRepository = new ArrayList<>();
-                for (Index index : indexesFromThePageIndexRepository) {
-                    lemmasFromThePageIndexRepository.add(index.getLemma());
-                }
-
-                for (Lemma lemmaOnThePage : lemmasFromThePageIndexRepository) {
-
-                    lemmaOnThePage.setFrequency(lemmaOnThePage.getFrequency() - 1);
-                    if (lemmaOnThePage.getFrequency() == 0) {
-                        lemmaRepository.delete(lemmaOnThePage);
-                    }
-                }
-
-                pageRepository.delete(pageFromDB);
-            }
+            deleteOldPageAndRemoveOldLemmasInformation(isPageAlreadyInDB, pageFromDB);
             pageRepository.save(page);
 
-            for (Map.Entry<String, Integer> entry : lemmas.entrySet()) {
-                boolean isLemmaAlreadyInDB = false;
-                Lemma newLemma = new Lemma();
-                for (Lemma lemma : lemmaRepository.findAll()) {
-                    if (lemma.getLemma().equals(entry.getKey())) {
-                        lemma.setFrequency(lemma.getFrequency() + 1);
-                        lemmaRepository.save(lemma);
-                        isLemmaAlreadyInDB = true;
-                        newLemma = lemma;
-                        break;
-                    }
-                }
-                if (!isLemmaAlreadyInDB) {
-                    newLemma.setSite(siteDB);
-                    newLemma.setLemma(entry.getKey());
-                    newLemma.setFrequency(1);
-                    lemmaRepository.save(newLemma);
-                }
-                Index index = new Index();
-                index.setPage(page);
-                index.setLemma(newLemma);
-                index.setRank(entry.getValue());
-                indexRepository.save(index);
-            }
+            setLemmasAndIndexesToRepository(page, siteDB, lemmas);
         } catch (HttpStatusException httpStatusException) {
             page.setCode(httpStatusException.getStatusCode());
             pageRepository.save(page);
@@ -241,6 +199,54 @@ public class IndexingServiceImpl implements IndexingService {
             return false;
         }
         return true;
+    }
+
+    private void deleteOldPageAndRemoveOldLemmasInformation(boolean isPageAlreadyInDB, Page pageFromDB) {
+        if (isPageAlreadyInDB) {
+
+            List<Index> indexesFromThePageIndexRepository = indexRepository.findAllByPage(pageFromDB);
+            List<Lemma> lemmasFromThePageIndexRepository = new ArrayList<>();
+            for (Index index : indexesFromThePageIndexRepository) {
+                lemmasFromThePageIndexRepository.add(index.getLemma());
+            }
+
+            for (Lemma lemmaOnThePage : lemmasFromThePageIndexRepository) {
+
+                lemmaOnThePage.setFrequency(lemmaOnThePage.getFrequency() - 1);
+                if (lemmaOnThePage.getFrequency() == 0) {
+                    lemmaRepository.delete(lemmaOnThePage);
+                }
+            }
+
+            pageRepository.delete(pageFromDB);
+        }
+    }
+
+    private void setLemmasAndIndexesToRepository(Page page, searchengine.model.Site siteDB, HashMap<String, Integer> lemmas) {
+        for (Map.Entry<String, Integer> entry : lemmas.entrySet()) {
+            boolean isLemmaAlreadyInDB = false;
+            Lemma newLemma = new Lemma();
+            for (Lemma lemma : lemmaRepository.findAll()) {
+                if (lemma.getLemma().equals(entry.getKey())) {
+                    lemma.setFrequency(lemma.getFrequency() + 1);
+                    lemmaRepository.save(lemma);
+                    isLemmaAlreadyInDB = true;
+                    newLemma = lemma;
+                    break;
+                }
+            }
+            if (!isLemmaAlreadyInDB) {
+                newLemma.setSite(siteDB);
+                newLemma.setLemma(entry.getKey());
+                newLemma.setFrequency(1);
+                lemmaRepository.save(newLemma);
+            }
+            Index index = new Index();
+            index.setPage(page);
+            index.setLemma(newLemma);
+            index.setRank(entry.getValue());
+            indexRepository.save(index);
+        }
     }
 
 
@@ -254,39 +260,39 @@ public class IndexingServiceImpl implements IndexingService {
                 PageProcessor processor = new PageProcessor(siteConfig, siteConfig, pageRepository,
                         siteRepository, lemmaRepository, indexRepository);
                 pool.invoke(processor);
-
-
-                searchengine.model.Site siteDB = null;
-                for (searchengine.model.Site siteModel : siteRepository.findAll()) {
-                    if (siteModel.getUrl().equals(siteConfig.getUrl())) {
-                        siteDB = siteModel;
-                        break;
-                    }
-                }
-
-                if (indexingStopped) {
-                    siteDB.setStatus(Status.FAILED);
-                    siteDB.setLastError("Индексация остановлена пользователем");
-
-                    siteRepository.save(siteDB);
-
-                } else {
-                    if (!siteDB.getStatus().equals(Status.FAILED)) {
-                        siteDB.setStatus(Status.INDEXED);
-                        siteRepository.save(siteDB);
-                    }
-                }
+                getSiteFromDBAndChangeSiteStatusIfNeeded(siteConfig);
             }).start();
         }
         for (searchengine.model.Site siteDB : siteRepository.findAll()) {
             if (siteDB.getStatus().equals(Status.INDEXED)) {
                 sitesIndexed++;
-                System.out.println(sitesIndexed);
-                System.out.println(siteRepository.count());
             }
         }
         if (sitesIndexed == siteRepository.count()) {
             indexingNow = false;
+        }
+    }
+
+    private void getSiteFromDBAndChangeSiteStatusIfNeeded(Site siteConfig) {
+        searchengine.model.Site siteDB = null;
+        for (searchengine.model.Site siteModel : siteRepository.findAll()) {
+            if (siteModel.getUrl().equals(siteConfig.getUrl())) {
+                siteDB = siteModel;
+                break;
+            }
+        }
+
+        if (indexingStopped) {
+            siteDB.setStatus(Status.FAILED);
+            siteDB.setLastError("Индексация остановлена пользователем");
+
+            siteRepository.save(siteDB);
+
+        } else {
+            if (!siteDB.getStatus().equals(Status.FAILED)) {
+                siteDB.setStatus(Status.INDEXED);
+                siteRepository.save(siteDB);
+            }
         }
     }
 
